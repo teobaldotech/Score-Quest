@@ -1,116 +1,291 @@
-// index.js
-import React from 'react';
-import ReactDOM from 'react-dom';
-import { I18nextProvider, useTranslation } from 'react-i18next';
-import i18n from 'i18next';
-import './index.css'; // Importando o CSS para estilos
+import React, { useState, useEffect } from "react";
+import Tesseract from "tesseract.js";
 
-// Inicialização do i18next para tradução
-i18n.init({
-  resources: {
-    en: {
-      translation: {
-        welcome: "Welcome to Score Quest!",
-        play: "Play Now",
-        score: "Your Score",
-        language: "Change Language",
-        scoreMessage: "Your new score is"
-      }
-    },
-    pt: {
-      translation: {
-        welcome: "Bem-vindo ao Score Quest!",
-        play: "Jogar Agora",
-        score: "Sua Pontuação",
-        language: "Mudar Idioma",
-        scoreMessage: "Sua nova pontuação é"
-      }
+export default function TradutorGamerPro() {
+  const [imagem, setImagem] = useState(null);
+  const [texto, setTexto] = useState("");
+  const [traducao, setTraducao] = useState("");
+  const [historico, setHistorico] = useState([]);
+  const [darkMode, setDarkMode] = useState(true);
+  const [idiomaOrigem, setIdiomaOrigem] = useState("en");
+  const [idiomaDestino, setIdiomaDestino] = useState("pt");
+  const [autoTranslate, setAutoTranslate] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const atalhos = (e) => {
+      if (e.key === "F8") narrar();
+      if (e.key === "F9") limparHistorico();
+      if (e.key === "F10") setDarkMode((v) => !v);
+    };
+
+    window.addEventListener("keydown", atalhos);
+    return () => window.removeEventListener("keydown", atalhos);
+  }, []);
+
+  useEffect(() => {
+    if (!autoTranslate || !texto) return;
+
+    const timer = setTimeout(() => {
+      traduzir(texto);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [texto, idiomaOrigem, idiomaDestino]);
+
+  const reconhecerTexto = async (arquivo) => {
+    setLoading(true);
+
+    try {
+      const resultado = await Tesseract.recognize(
+        arquivo,
+        idiomaOrigem === "pt" ? "por" : "eng"
+      );
+
+      setTexto(resultado.data.text);
+    } catch (err) {
+      console.error(err);
     }
-  },
-  lng: 'en', // idioma padrão
-  fallbackLng: 'en',
-  interpolation: { escapeValue: false } // React já escapa
-});
 
-// Componente principal do aplicativo
-const App = () => {
-  const { t } = useTranslation();
-  const [score, setScore] = React.useState(0);
-  const [message, setMessage] = React.useState("");
-
-  const handlePlay = () => {
-    const newScore = Math.floor(Math.random() * 100);
-    setScore(newScore);
-    setMessage(`t(′scoreMessage′):{t('scoreMessage')}:t(′scoreMessage′):{newScore}`);
-
-    // Limpar a mensagem após 3 segundos
-    setTimeout(() => {
-      setMessage("");
-    }, 3000);
+    setLoading(false);
   };
 
-  const changeLanguage = (lng) => {
-    i18n.changeLanguage(lng);
+  const traduzir = async (conteudo) => {
+    try {
+      const resposta = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
+          conteudo
+        )}&langpair=${idiomaOrigem}|${idiomaDestino}`
+      );
+
+      const dados = await resposta.json();
+
+      const textoTraduzido =
+        dados.responseData.translatedText;
+
+      setTraducao(textoTraduzido);
+
+      setHistorico((antigo) => [
+        {
+          original: conteudo,
+          traduzido: textoTraduzido,
+          data: new Date().toLocaleString(),
+        },
+        ...antigo.slice(0, 49),
+      ]);
+    } catch (erro) {
+      console.error(erro);
+    }
+  };
+
+  const narrar = () => {
+    if (!traducao) return;
+
+    speechSynthesis.cancel();
+
+    const voz = new SpeechSynthesisUtterance(
+      traducao
+    );
+
+    voz.lang =
+      idiomaDestino === "pt"
+        ? "pt-BR"
+        : idiomaDestino;
+
+    voz.rate = 1;
+    voz.pitch = 1;
+
+    speechSynthesis.speak(voz);
+  };
+
+  const limparHistorico = () => {
+    setHistorico([]);
   };
 
   return (
-    <div style={styles.container}>
-      <h1>{t('welcome')}</h1>
-      <button onClick={handlePlay} style={styles.button}>{t('play')}</button>
-      {message && <p style={styles.scoreMessage}>{message}</p>}
-      <div style={styles.languageSelector}>
-        <h2>{t('language')}</h2>
-        <button onClick={() => changeLanguage('en')} style={styles.languageButton}>English</button>
-        <button onClick={() => changeLanguage('pt')} style={styles.languageButton}>Português</button>
+    <div
+      style={{
+        minHeight: "100vh",
+        padding: 20,
+        background: darkMode ? "#111" : "#f5f5f5",
+        color: darkMode ? "#fff" : "#000",
+        fontFamily: "Arial"
+      }}
+    >
+      <h1>🎮 Tradutor Gamer Pro</h1>
+
+      <button
+        onClick={() => setDarkMode(!darkMode)}
+      >
+        {darkMode ? "☀️ Claro" : "🌙 Escuro"}
+      </button>
+
+      <hr />
+
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          const file = e.target.files[0];
+
+          if (!file) return;
+
+          setImagem(URL.createObjectURL(file));
+          reconhecerTexto(file);
+        }}
+      />
+
+      <div style={{ marginTop: 15 }}>
+        <label>Idioma Origem:</label>
+
+        <select
+          value={idiomaOrigem}
+          onChange={(e) =>
+            setIdiomaOrigem(e.target.value)
+          }
+        >
+          <option value="en">Inglês</option>
+          <option value="pt">Português</option>
+          <option value="es">Espanhol</option>
+          <option value="fr">Francês</option>
+          <option value="de">Alemão</option>
+          <option value="ja">Japonês</option>
+        </select>
+
+        <label
+          style={{
+            marginLeft: 15
+          }}
+        >
+          Destino:
+        </label>
+
+        <select
+          value={idiomaDestino}
+          onChange={(e) =>
+            setIdiomaDestino(e.target.value)
+          }
+        >
+          <option value="pt">Português</option>
+          <option value="en">Inglês</option>
+          <option value="es">Espanhol</option>
+          <option value="fr">Francês</option>
+          <option value="de">Alemão</option>
+          <option value="ja">Japonês</option>
+        </select>
       </div>
+
+      {imagem && (
+        <img
+          src={imagem}
+          alt=""
+          style={{
+            width: "100%",
+            maxHeight: 300,
+            objectFit: "contain",
+            marginTop: 15
+          }}
+        />
+      )}
+
+      {loading && (
+        <p>🔍 Reconhecendo texto...</p>
+      )}
+
+      <h2>Texto Detectado</h2>
+
+      <textarea
+        rows={8}
+        value={texto}
+        onChange={(e) =>
+          setTexto(e.target.value)
+        }
+        style={{
+          width: "100%"
+        }}
+      />
+
+      <h2>Tradução</h2>
+
+      <textarea
+        rows={8}
+        value={traducao}
+        readOnly
+        style={{
+          width: "100%"
+        }}
+      />
+
+      <div
+        style={{
+          marginTop: 15
+        }}
+      >
+        <button
+          onClick={() =>
+            traduzir(texto)
+          }
+        >
+          Traduzir
+        </button>
+
+        <button
+          onClick={narrar}
+          style={{
+            marginLeft: 10
+          }}
+        >
+          🔊 Narrar
+        </button>
+
+        <button
+          onClick={limparHistorico}
+          style={{
+            marginLeft: 10
+          }}
+        >
+          Limpar Histórico
+        </button>
+      </div>
+
+      <h2>Histórico</h2>
+
+      <div>
+        {historico.map((item, index) => (
+          <div
+            key={index}
+            style={{
+              border: "1px solid #555",
+              padding: 10,
+              marginTop: 10,
+              borderRadius: 8
+            }}
+          >
+            <small>{item.data}</small>
+
+            <p>
+              <strong>Original:</strong>
+              {" "}
+              {item.original}
+            </p>
+
+            <p>
+              <strong>Traduzido:</strong>
+              {" "}
+              {item.traduzido}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <hr />
+
+      <p>
+        Atalhos:
+        F8 = Narrar |
+        F9 = Limpar Histórico |
+        F10 = Alternar Tema
+      </p>
     </div>
   );
-};
-
-// Estilos simples (em linha)
-const styles = {
-  container: {
-    textAlign: 'center',
-    background: 'white',
-    padding: '20px',
-    borderRadius: '8px',
-    boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',
-    margin: '50px auto',
-    maxWidth: '400px'
-  },
-  button: {
-    backgroundColor: '#28a745',
-    color: 'white',
-    border: 'none',
-    padding: '10px 20px',
-    borderRadius: '5px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    margin: '10px 0',
-  },
-  scoreMessage: {
-    fontSize: '20px',
-    marginTop: '10px',
-    color: '#007bff', // Cor azul
-  },
-  languageSelector: {
-    marginTop: '20px',
-  },
-  languageButton: {
-    margin: '5px',
-    padding: '5px 10px',
-    cursor: 'pointer',
-    border: 'none',
-    backgroundColor: '#007bff',
-    color: 'white',
-    borderRadius: '5px',
-  },
-};
-
-// Renderização do aplicativo
-ReactDOM.render(
-  <I18nextProvider i18n={i18n}>
-    <App />
-  </I18nextProvider>,
-  document.getElementById('root')
-);
+}
