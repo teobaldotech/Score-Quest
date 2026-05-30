@@ -1,0 +1,116 @@
+// index.js
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { I18nextProvider, useTranslation } from 'react-i18next';
+import i18n from 'i18next';
+import './index.css'; // Importando o CSS para estilos
+
+// Inicialização do i18next para tradução
+i18n.init({
+  resources: {
+    en: {
+      translation: {
+        welcome: "Welcome to Score Quest!",
+        play: "Play Now",
+        score: "Your Score",
+        language: "Change Language",
+        scoreMessage: "Your new score is"
+      }
+    },
+    pt: {
+      translation: {
+        welcome: "Bem-vindo ao Score Quest!",
+        play: "Jogar Agora",
+        score: "Sua Pontuação",
+        language: "Mudar Idioma",
+        scoreMessage: "Sua nova pontuação é"
+      }
+    }
+  },
+  lng: 'en', // idioma padrão
+  fallbackLng: 'en',
+  interpolation: { escapeValue: false } // React já escapa
+});
+
+// Componente principal do aplicativo
+const App = () => {
+  const { t } = useTranslation();
+  const [score, setScore] = React.useState(0);
+  const [message, setMessage] = React.useState("");
+
+  const handlePlay = () => {
+    const newScore = Math.floor(Math.random() * 100);
+    setScore(newScore);
+    setMessage(`t(′scoreMessage′):{t('scoreMessage')}:t(′scoreMessage′):{newScore}`);
+
+    // Limpar a mensagem após 3 segundos
+    setTimeout(() => {
+      setMessage("");
+    }, 3000);
+  };
+
+  const changeLanguage = (lng) => {
+    i18n.changeLanguage(lng);
+  };
+
+  return (
+    <div style={styles.container}>
+      <h1>{t('welcome')}</h1>
+      <button onClick={handlePlay} style={styles.button}>{t('play')}</button>
+      {message && <p style={styles.scoreMessage}>{message}</p>}
+      <div style={styles.languageSelector}>
+        <h2>{t('language')}</h2>
+        <button onClick={() => changeLanguage('en')} style={styles.languageButton}>English</button>
+        <button onClick={() => changeLanguage('pt')} style={styles.languageButton}>Português</button>
+      </div>
+    </div>
+  );
+};
+
+// Estilos simples (em linha)
+const styles = {
+  container: {
+    textAlign: 'center',
+    background: 'white',
+    padding: '20px',
+    borderRadius: '8px',
+    boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',
+    margin: '50px auto',
+    maxWidth: '400px'
+  },
+  button: {
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    padding: '10px 20px',
+    borderRadius: '5px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    margin: '10px 0',
+  },
+  scoreMessage: {
+    fontSize: '20px',
+    marginTop: '10px',
+    color: '#007bff', // Cor azul
+  },
+  languageSelector: {
+    marginTop: '20px',
+  },
+  languageButton: {
+    margin: '5px',
+    padding: '5px 10px',
+    cursor: 'pointer',
+    border: 'none',
+    backgroundColor: '#007bff',
+    color: 'white',
+    borderRadius: '5px',
+  },
+};
+
+// Renderização do aplicativo
+ReactDOM.render(
+  <I18nextProvider i18n={i18n}>
+    <App />
+  </I18nextProvider>,
+  document.getElementById('root')
+);
