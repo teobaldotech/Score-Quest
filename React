@@ -11,46 +11,134 @@ export default function TradutorGamerPro() {
   const [idiomaDestino, setIdiomaDestino] = useState("pt");
   const [autoTranslate, setAutoTranslate] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [progresso, setProgresso] = useState(0);
+  const [ultimoTexto, setUltimoTexto] = useState("");
+
+  const idiomasOCR = {
+    pt: "por",
+    en: "eng",
+    es: "spa",
+    fr: "fra",
+    de: "deu",
+    ja: "jpn"
+  };
 
   useEffect(() => {
-    const atalhos = (e) => {
-      if (e.key === "F8") narrar();
-      if (e.key === "F9") limparHistorico();
-      if (e.key === "F10") setDarkMode((v) => !v);
-    };
+    const salvo = localStorage.getItem("historicoTradutor");
 
-    window.addEventListener("keydown", atalhos);
-    return () => window.removeEventListener("keydown", atalhos);
+    if (salvo) {
+      try {
+        setHistorico(JSON.parse(salvo));
+      } catch {
+        setHistorico([]);
+      }
+    }
   }, []);
 
   useEffect(() => {
-    if (!autoTranslate || !texto) return;
+    localStorage.setItem(
+      "historicoTradutor",
+      JSON.stringify(historico)
+    );
+  }, [historico]);
+
+  useEffect(() => {
+    return () => {
+      if (imagem) {
+        URL.revokeObjectURL(imagem);
+      }
+    };
+  }, [imagem]);
+
+  useEffect(() => {
+    const atalhos = (e) => {
+      if (e.key === "F8") {
+        e.preventDefault();
+        narrar();
+      }
+
+      if (e.key === "F9") {
+        e.preventDefault();
+        limparHistorico();
+      }
+
+      if (e.key === "F10") {
+        e.preventDefault();
+        setDarkMode((v) => !v);
+      }
+    };
+
+    window.addEventListener("keydown", atalhos);
+
+    return () =>
+      window.removeEventListener(
+        "keydown",
+        atalhos
+      );
+  }, [traducao]);
+
+  useEffect(() => {
+    if (
+      !autoTranslate ||
+      !texto ||
+      texto === ultimoTexto
+    ) {
+      return;
+    }
 
     const timer = setTimeout(() => {
       traduzir(texto);
+      setUltimoTexto(texto);
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [texto, idiomaOrigem, idiomaDestino]);
+  }, [
+    texto,
+    idiomaOrigem,
+    idiomaDestino,
+    autoTranslate,
+    ultimoTexto
+  ]);
 
   const reconhecerTexto = async (arquivo) => {
     setLoading(true);
+    setProgresso(0);
 
     try {
-      const resultado = await Tesseract.recognize(
-        arquivo,
-        idiomaOrigem === "pt" ? "por" : "eng"
-      );
+      const resultado =
+        await Tesseract.recognize(
+          arquivo,
+          idiomasOCR[idiomaOrigem] || "eng",
+          {
+            logger: (m) => {
+              if (
+                m.status ===
+                "recognizing text"
+              ) {
+                setProgresso(
+                  Math.round(
+                    m.progress * 100
+                  )
+                );
+              }
+            }
+          }
+        );
 
       setTexto(resultado.data.text);
-    } catch (err) {
-      console.error(err);
+    } catch (erro) {
+      console.error(erro);
+      alert(
+        "Erro ao reconhecer texto."
+      );
     }
 
     setLoading(false);
   };
 
   const traduzir = async (conteudo) => {
+    if (!conteudo.trim()) return;
+
     try {
       const resposta = await fetch(
         `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
@@ -58,21 +146,40 @@ export default function TradutorGamerPro() {
         )}&langpair=${idiomaOrigem}|${idiomaDestino}`
       );
 
-      const dados = await resposta.json();
+      if (!resposta.ok) {
+        throw new Error(
+          "Erro na tradução"
+        );
+      }
+
+      const dados =
+        await resposta.json();
 
       const textoTraduzido =
-        dados.responseData.translatedText;
+        dados?.responseData
+          ?.translatedText || "";
 
       setTraducao(textoTraduzido);
 
-      setHistorico((antigo) => [
-        {
-          original: conteudo,
-          traduzido: textoTraduzido,
-          data: new Date().toLocaleString(),
-        },
-        ...antigo.slice(0, 49),
-      ]);
+      setHistorico((antigo) => {
+        if (
+          antigo.length > 0 &&
+          antigo[0].original ===
+            conteudo
+        ) {
+          return antigo;
+        }
+
+        return [
+          {
+            original: conteudo,
+            traduzido:
+              textoTraduzido,
+            data: new Date().toLocaleString()
+          },
+          ...antigo.slice(0, 49)
+        ];
+      });
     } catch (erro) {
       console.error(erro);
     }
@@ -81,11 +188,21 @@ export default function TradutorGamerPro() {
   const narrar = () => {
     if (!traducao) return;
 
-    speechSynthesis.cancel();
+    if (
+      !("speechSynthesis" in window)
+    ) {
+      alert(
+        "Seu navegador não suporta voz."
+      );
+      return;
+    }
 
-    const voz = new SpeechSynthesisUtterance(
-      traducao
-    );
+    window.speechSynthesis.cancel();
+
+    const voz =
+      new SpeechSynthesisUtterance(
+        traducao
+      );
 
     voz.lang =
       idiomaDestino === "pt"
@@ -94,12 +211,18 @@ export default function TradutorGamerPro() {
 
     voz.rate = 1;
     voz.pitch = 1;
+    voz.volume = 1;
 
-    speechSynthesis.speak(voz);
+    window.speechSynthesis.speak(
+      voz
+    );
   };
 
   const limparHistorico = () => {
     setHistorico([]);
+    localStorage.removeItem(
+      "historicoTradutor"
+    );
   };
 
   return (
@@ -107,18 +230,47 @@ export default function TradutorGamerPro() {
       style={{
         minHeight: "100vh",
         padding: 20,
-        background: darkMode ? "#111" : "#f5f5f5",
-        color: darkMode ? "#fff" : "#000",
+        background: darkMode
+          ? "#111"
+          : "#f5f5f5",
+        color: darkMode
+          ? "#fff"
+          : "#000",
         fontFamily: "Arial"
       }}
     >
-      <h1>🎮 Tradutor Gamer Pro</h1>
+      <h1>
+        🎮 Tradutor Gamer Pro
+      </h1>
 
       <button
-        onClick={() => setDarkMode(!darkMode)}
+        onClick={() =>
+          setDarkMode(
+            !darkMode
+          )
+        }
       >
-        {darkMode ? "☀️ Claro" : "🌙 Escuro"}
+        {darkMode
+          ? "☀️ Claro"
+          : "🌙 Escuro"}
       </button>
+
+      <label
+        style={{
+          marginLeft: 15
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={autoTranslate}
+          onChange={() =>
+            setAutoTranslate(
+              !autoTranslate
+            )
+          }
+        />
+        Tradução Automática
+      </label>
 
       <hr />
 
@@ -126,30 +278,63 @@ export default function TradutorGamerPro() {
         type="file"
         accept="image/*"
         onChange={(e) => {
-          const file = e.target.files[0];
+          const file =
+            e.target.files?.[0];
 
           if (!file) return;
 
-          setImagem(URL.createObjectURL(file));
-          reconhecerTexto(file);
+          const novaImagem =
+            URL.createObjectURL(
+              file
+            );
+
+          setImagem(
+            novaImagem
+          );
+
+          reconhecerTexto(
+            file
+          );
         }}
       />
 
-      <div style={{ marginTop: 15 }}>
-        <label>Idioma Origem:</label>
+      <div
+        style={{
+          marginTop: 15
+        }}
+      >
+        <label>
+          Origem:
+        </label>
 
         <select
-          value={idiomaOrigem}
+          value={
+            idiomaOrigem
+          }
           onChange={(e) =>
-            setIdiomaOrigem(e.target.value)
+            setIdiomaOrigem(
+              e.target.value
+            )
           }
         >
-          <option value="en">Inglês</option>
-          <option value="pt">Português</option>
-          <option value="es">Espanhol</option>
-          <option value="fr">Francês</option>
-          <option value="de">Alemão</option>
-          <option value="ja">Japonês</option>
+          <option value="en">
+            Inglês
+          </option>
+          <option value="pt">
+            Português
+          </option>
+          <option value="es">
+            Espanhol
+          </option>
+          <option value="fr">
+            Francês
+          </option>
+          <option value="de">
+            Alemão
+          </option>
+          <option value="ja">
+            Japonês
+          </option>
         </select>
 
         <label
@@ -161,44 +346,70 @@ export default function TradutorGamerPro() {
         </label>
 
         <select
-          value={idiomaDestino}
+          value={
+            idiomaDestino
+          }
           onChange={(e) =>
-            setIdiomaDestino(e.target.value)
+            setIdiomaDestino(
+              e.target.value
+            )
           }
         >
-          <option value="pt">Português</option>
-          <option value="en">Inglês</option>
-          <option value="es">Espanhol</option>
-          <option value="fr">Francês</option>
-          <option value="de">Alemão</option>
-          <option value="ja">Japonês</option>
+          <option value="pt">
+            Português
+          </option>
+          <option value="en">
+            Inglês
+          </option>
+          <option value="es">
+            Espanhol
+          </option>
+          <option value="fr">
+            Francês
+          </option>
+          <option value="de">
+            Alemão
+          </option>
+          <option value="ja">
+            Japonês
+          </option>
         </select>
       </div>
 
       {imagem && (
         <img
           src={imagem}
-          alt=""
+          alt="captura"
           style={{
             width: "100%",
             maxHeight: 300,
-            objectFit: "contain",
-            marginTop: 15
+            objectFit:
+              "contain",
+            marginTop: 15,
+            borderRadius: 10
           }}
         />
       )}
 
       {loading && (
-        <p>🔍 Reconhecendo texto...</p>
+        <p>
+          🔍 OCR:
+          {" "}
+          {progresso}%
+        </p>
       )}
 
-      <h2>Texto Detectado</h2>
+      <h2>
+        Texto Detectado
+      </h2>
 
       <textarea
         rows={8}
         value={texto}
         onChange={(e) =>
-          setTexto(e.target.value)
+          setTexto(
+            e.target.value
+          )
         }
         style={{
           width: "100%"
@@ -239,7 +450,9 @@ export default function TradutorGamerPro() {
         </button>
 
         <button
-          onClick={limparHistorico}
+          onClick={
+            limparHistorico
+          }
           style={{
             marginLeft: 10
           }}
@@ -250,38 +463,57 @@ export default function TradutorGamerPro() {
 
       <h2>Histórico</h2>
 
-      <div>
-        {historico.map((item, index) => (
-          <div
-            key={index}
-            style={{
-              border: "1px solid #555",
-              padding: 10,
-              marginTop: 10,
-              borderRadius: 8
-            }}
-          >
-            <small>{item.data}</small>
+      {historico.length ===
+      0 ? (
+        <p>
+          Nenhuma tradução
+          realizada.
+        </p>
+      ) : (
+        historico.map(
+          (
+            item,
+            index
+          ) => (
+            <div
+              key={index}
+              style={{
+                border:
+                  "1px solid #555",
+                padding: 10,
+                marginTop: 10,
+                borderRadius: 8
+              }}
+            >
+              <small>
+                {item.data}
+              </small>
 
-            <p>
-              <strong>Original:</strong>
-              {" "}
-              {item.original}
-            </p>
+              <p>
+                <strong>
+                  Original:
+                </strong>{" "}
+                {
+                  item.original
+                }
+              </p>
 
-            <p>
-              <strong>Traduzido:</strong>
-              {" "}
-              {item.traduzido}
-            </p>
-          </div>
-        ))}
-      </div>
+              <p>
+                <strong>
+                  Tradução:
+                </strong>{" "}
+                {
+                  item.traduzido
+                }
+              </p>
+            </div>
+          )
+        )
+      )}
 
       <hr />
 
       <p>
-        Atalhos:
         F8 = Narrar |
         F9 = Limpar Histórico |
         F10 = Alternar Tema
