@@ -1,523 +1,498 @@
-import React, { useState, useEffect } from "react";
-import Tesseract from "tesseract.js";
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-export default function TradutorGamerPro() {
-  const [imagem, setImagem] = useState(null);
-  const [texto, setTexto] = useState("");
-  const [traducao, setTraducao] = useState("");
-  const [historico, setHistorico] = useState([]);
-  const [darkMode, setDarkMode] = useState(true);
-  const [idiomaOrigem, setIdiomaOrigem] = useState("en");
-  const [idiomaDestino, setIdiomaDestino] = useState("pt");
-  const [autoTranslate, setAutoTranslate] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [progresso, setProgresso] = useState(0);
-  const [ultimoTexto, setUltimoTexto] = useState("");
+<title>Tradutor Gamer Ultra OCR</title>
 
-  const idiomasOCR = {
-    pt: "por",
-    en: "eng",
-    es: "spa",
-    fr: "fra",
-    de: "deu",
-    ja: "jpn"
-  };
+<meta name="theme-color" content="#00ffff">
 
-  useEffect(() => {
-    const salvo = localStorage.getItem("historicoTradutor");
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-    if (salvo) {
-      try {
-        setHistorico(JSON.parse(salvo));
-      } catch {
-        setHistorico([]);
-      }
-    }
-  }, []);
+<style>
 
-  useEffect(() => {
-    localStorage.setItem(
-      "historicoTradutor",
-      JSON.stringify(historico)
-    );
-  }, [historico]);
-
-  useEffect(() => {
-    return () => {
-      if (imagem) {
-        URL.revokeObjectURL(imagem);
-      }
-    };
-  }, [imagem]);
-
-  useEffect(() => {
-    const atalhos = (e) => {
-      if (e.key === "F8") {
-        e.preventDefault();
-        narrar();
-      }
-
-      if (e.key === "F9") {
-        e.preventDefault();
-        limparHistorico();
-      }
-
-      if (e.key === "F10") {
-        e.preventDefault();
-        setDarkMode((v) => !v);
-      }
-    };
-
-    window.addEventListener("keydown", atalhos);
-
-    return () =>
-      window.removeEventListener(
-        "keydown",
-        atalhos
-      );
-  }, [traducao]);
-
-  useEffect(() => {
-    if (
-      !autoTranslate ||
-      !texto ||
-      texto === ultimoTexto
-    ) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      traduzir(texto);
-      setUltimoTexto(texto);
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [
-    texto,
-    idiomaOrigem,
-    idiomaDestino,
-    autoTranslate,
-    ultimoTexto
-  ]);
-
-  const reconhecerTexto = async (arquivo) => {
-    setLoading(true);
-    setProgresso(0);
-
-    try {
-      const resultado =
-        await Tesseract.recognize(
-          arquivo,
-          idiomasOCR[idiomaOrigem] || "eng",
-          {
-            logger: (m) => {
-              if (
-                m.status ===
-                "recognizing text"
-              ) {
-                setProgresso(
-                  Math.round(
-                    m.progress * 100
-                  )
-                );
-              }
-            }
-          }
-        );
-
-      setTexto(resultado.data.text);
-    } catch (erro) {
-      console.error(erro);
-      alert(
-        "Erro ao reconhecer texto."
-      );
-    }
-
-    setLoading(false);
-  };
-
-  const traduzir = async (conteudo) => {
-    if (!conteudo.trim()) return;
-
-    try {
-      const resposta = await fetch(
-        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
-          conteudo
-        )}&langpair=${idiomaOrigem}|${idiomaDestino}`
-      );
-
-      if (!resposta.ok) {
-        throw new Error(
-          "Erro na tradução"
-        );
-      }
-
-      const dados =
-        await resposta.json();
-
-      const textoTraduzido =
-        dados?.responseData
-          ?.translatedText || "";
-
-      setTraducao(textoTraduzido);
-
-      setHistorico((antigo) => {
-        if (
-          antigo.length > 0 &&
-          antigo[0].original ===
-            conteudo
-        ) {
-          return antigo;
-        }
-
-        return [
-          {
-            original: conteudo,
-            traduzido:
-              textoTraduzido,
-            data: new Date().toLocaleString()
-          },
-          ...antigo.slice(0, 49)
-        ];
-      });
-    } catch (erro) {
-      console.error(erro);
-    }
-  };
-
-  const narrar = () => {
-    if (!traducao) return;
-
-    if (
-      !("speechSynthesis" in window)
-    ) {
-      alert(
-        "Seu navegador não suporta voz."
-      );
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-
-    const voz =
-      new SpeechSynthesisUtterance(
-        traducao
-      );
-
-    voz.lang =
-      idiomaDestino === "pt"
-        ? "pt-BR"
-        : idiomaDestino;
-
-    voz.rate = 1;
-    voz.pitch = 1;
-    voz.volume = 1;
-
-    window.speechSynthesis.speak(
-      voz
-    );
-  };
-
-  const limparHistorico = () => {
-    setHistorico([]);
-    localStorage.removeItem(
-      "historicoTradutor"
-    );
-  };
-
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        padding: 20,
-        background: darkMode
-          ? "#111"
-          : "#f5f5f5",
-        color: darkMode
-          ? "#fff"
-          : "#000",
-        fontFamily: "Arial"
-      }}
-    >
-      <h1>
-        🎮 Tradutor Gamer Pro
-      </h1>
-
-      <button
-        onClick={() =>
-          setDarkMode(
-            !darkMode
-          )
-        }
-      >
-        {darkMode
-          ? "☀️ Claro"
-          : "🌙 Escuro"}
-      </button>
-
-      <label
-        style={{
-          marginLeft: 15
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={autoTranslate}
-          onChange={() =>
-            setAutoTranslate(
-              !autoTranslate
-            )
-          }
-        />
-        Tradução Automática
-      </label>
-
-      <hr />
-
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) => {
-          const file =
-            e.target.files?.[0];
-
-          if (!file) return;
-
-          const novaImagem =
-            URL.createObjectURL(
-              file
-            );
-
-          setImagem(
-            novaImagem
-          );
-
-          reconhecerTexto(
-            file
-          );
-        }}
-      />
-
-      <div
-        style={{
-          marginTop: 15
-        }}
-      >
-        <label>
-          Origem:
-        </label>
-
-        <select
-          value={
-            idiomaOrigem
-          }
-          onChange={(e) =>
-            setIdiomaOrigem(
-              e.target.value
-            )
-          }
-        >
-          <option value="en">
-            Inglês
-          </option>
-          <option value="pt">
-            Português
-          </option>
-          <option value="es">
-            Espanhol
-          </option>
-          <option value="fr">
-            Francês
-          </option>
-          <option value="de">
-            Alemão
-          </option>
-          <option value="ja">
-            Japonês
-          </option>
-        </select>
-
-        <label
-          style={{
-            marginLeft: 15
-          }}
-        >
-          Destino:
-        </label>
-
-        <select
-          value={
-            idiomaDestino
-          }
-          onChange={(e) =>
-            setIdiomaDestino(
-              e.target.value
-            )
-          }
-        >
-          <option value="pt">
-            Português
-          </option>
-          <option value="en">
-            Inglês
-          </option>
-          <option value="es">
-            Espanhol
-          </option>
-          <option value="fr">
-            Francês
-          </option>
-          <option value="de">
-            Alemão
-          </option>
-          <option value="ja">
-            Japonês
-          </option>
-        </select>
-      </div>
-
-      {imagem && (
-        <img
-          src={imagem}
-          alt="captura"
-          style={{
-            width: "100%",
-            maxHeight: 300,
-            objectFit:
-              "contain",
-            marginTop: 15,
-            borderRadius: 10
-          }}
-        />
-      )}
-
-      {loading && (
-        <p>
-          🔍 OCR:
-          {" "}
-          {progresso}%
-        </p>
-      )}
-
-      <h2>
-        Texto Detectado
-      </h2>
-
-      <textarea
-        rows={8}
-        value={texto}
-        onChange={(e) =>
-          setTexto(
-            e.target.value
-          )
-        }
-        style={{
-          width: "100%"
-        }}
-      />
-
-      <h2>Tradução</h2>
-
-      <textarea
-        rows={8}
-        value={traducao}
-        readOnly
-        style={{
-          width: "100%"
-        }}
-      />
-
-      <div
-        style={{
-          marginTop: 15
-        }}
-      >
-        <button
-          onClick={() =>
-            traduzir(texto)
-          }
-        >
-          Traduzir
-        </button>
-
-        <button
-          onClick={narrar}
-          style={{
-            marginLeft: 10
-          }}
-        >
-          🔊 Narrar
-        </button>
-
-        <button
-          onClick={
-            limparHistorico
-          }
-          style={{
-            marginLeft: 10
-          }}
-        >
-          Limpar Histórico
-        </button>
-      </div>
-
-      <h2>Histórico</h2>
-
-      {historico.length ===
-      0 ? (
-        <p>
-          Nenhuma tradução
-          realizada.
-        </p>
-      ) : (
-        historico.map(
-          (
-            item,
-            index
-          ) => (
-            <div
-              key={index}
-              style={{
-                border:
-                  "1px solid #555",
-                padding: 10,
-                marginTop: 10,
-                borderRadius: 8
-              }}
-            >
-              <small>
-                {item.data}
-              </small>
-
-              <p>
-                <strong>
-                  Original:
-                </strong>{" "}
-                {
-                  item.original
-                }
-              </p>
-
-              <p>
-                <strong>
-                  Tradução:
-                </strong>{" "}
-                {
-                  item.traduzido
-                }
-              </p>
-            </div>
-          )
-        )
-      )}
-
-      <hr />
-
-      <p>
-        F8 = Narrar |
-        F9 = Limpar Histórico |
-        F10 = Alternar Tema
-      </p>
-    </div>
-  );
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
 }
+
+body{
+background:linear-gradient(
+135deg,
+#050510,
+#0f172a,
+#111827
+);
+color:white;
+overflow-x:hidden;
+}
+
+.app{
+min-height:100vh;
+padding:20px;
+max-width:1400px;
+margin:auto;
+}
+
+.header{
+text-align:center;
+margin-bottom:25px;
+}
+
+.logo{
+font-size:42px;
+font-weight:bold;
+color:#00ffff;
+text-shadow:
+0 0 10px #00ffff,
+0 0 20px #00ffff;
+}
+
+.subtitle{
+opacity:.8;
+margin-top:10px;
+}
+
+.grid{
+display:grid;
+grid-template-columns:
+1fr 1fr;
+gap:20px;
+}
+
+@media(max-width:900px){
+
+.grid{
+grid-template-columns:1fr;
+}
+
+}
+
+.card{
+background:#161b22;
+border:1px solid #00ffff55;
+border-radius:20px;
+padding:20px;
+box-shadow:
+0 0 15px #00ffff22;
+backdrop-filter:blur(10px);
+}
+
+.card h2{
+margin-bottom:15px;
+color:#00ffff;
+}
+
+textarea{
+width:100%;
+min-height:220px;
+padding:15px;
+border-radius:15px;
+background:#0d1117;
+color:white;
+border:1px solid #333;
+resize:vertical;
+font-size:15px;
+}
+
+textarea:focus{
+outline:none;
+border-color:#00ffff;
+}
+
+button{
+padding:12px 18px;
+border:none;
+border-radius:12px;
+cursor:pointer;
+margin:5px;
+font-weight:bold;
+transition:.3s;
+background:
+linear-gradient(
+90deg,
+#00ffff,
+#00ff88
+);
+color:black;
+}
+
+button:hover{
+transform:translateY(-2px);
+box-shadow:
+0 0 15px #00ffff;
+}
+
+button.danger{
+background:
+linear-gradient(
+90deg,
+#ff4444,
+#ff8888
+);
+}
+
+input,
+select{
+padding:12px;
+border-radius:10px;
+border:none;
+margin:5px;
+}
+
+img.preview{
+width:100%;
+max-height:350px;
+object-fit:contain;
+border-radius:15px;
+margin-top:15px;
+border:1px solid #333;
+}
+
+.progress{
+height:12px;
+background:#222;
+border-radius:999px;
+overflow:hidden;
+margin-top:15px;
+}
+
+.progress-bar{
+height:100%;
+width:0%;
+background:
+linear-gradient(
+90deg,
+#00ffff,
+#00ff00
+);
+transition:.2s;
+}
+
+.dropzone{
+border:2px dashed #00ffff;
+padding:30px;
+border-radius:15px;
+text-align:center;
+margin-top:15px;
+cursor:pointer;
+transition:.3s;
+}
+
+.dropzone:hover{
+background:#00ffff11;
+}
+
+.history-item{
+margin-top:10px;
+padding:15px;
+border-radius:15px;
+background:#0d1117;
+border:1px solid #333;
+}
+
+.history-item small{
+display:block;
+margin-bottom:10px;
+opacity:.7;
+}
+
+.stats{
+display:grid;
+grid-template-columns:
+repeat(4,1fr);
+gap:10px;
+margin-bottom:20px;
+}
+
+@media(max-width:700px){
+
+.stats{
+grid-template-columns:
+repeat(2,1fr);
+}
+
+}
+
+.stat{
+padding:15px;
+background:#161b22;
+border-radius:15px;
+text-align:center;
+border:1px solid #00ffff33;
+}
+
+.stat h3{
+color:#00ffff;
+font-size:26px;
+}
+
+.top-actions{
+display:flex;
+flex-wrap:wrap;
+gap:10px;
+margin-top:15px;
+}
+
+.search{
+width:100%;
+margin-bottom:15px;
+}
+
+.footer{
+text-align:center;
+margin-top:30px;
+opacity:.7;
+font-size:14px;
+}
+
+.light{
+background:#f3f4f6;
+color:#111;
+}
+
+.light .card{
+background:white;
+}
+
+.light textarea{
+background:white;
+color:black;
+}
+
+.light .history-item{
+background:#fafafa;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel">
+
+function TradutorGamerUltra(){
+
+const [imagem,setImagem] =
+React.useState(null);
+
+const [texto,setTexto] =
+React.useState("");
+
+const [traducao,setTraducao] =
+React.useState("");
+
+const [loading,setLoading] =
+React.useState(false);
+
+const [progresso,setProgresso] =
+React.useState(0);
+
+const [darkMode,setDarkMode] =
+React.useState(true);
+
+const [autoTranslate,
+setAutoTranslate] =
+React.useState(true);
+
+const [historico,
+setHistorico] =
+React.useState([]);
+
+const [busca,
+setBusca] =
+React.useState("");
+
+const [idiomaOrigem,
+setIdiomaOrigem] =
+React.useState("en");
+
+const [idiomaDestino,
+setIdiomaDestino] =
+React.useState("pt");
+
+const idiomasOCR = {
+pt:"por",
+en:"eng",
+es:"spa",
+fr:"fra",
+de:"deu",
+ja:"jpn",
+it:"ita"
+};
+
+React.useEffect(()=>{
+
+const salvo =
+localStorage.getItem(
+"historicoTradutorUltra"
+);
+
+if(salvo){
+
+try{
+
+setHistorico(
+JSON.parse(salvo)
+);
+
+}catch{
+
+setHistorico([]);
+
+}
+
+}
+
+},[]);
+
+React.useEffect(()=>{
+
+localStorage.setItem(
+"historicoTradutorUltra",
+JSON.stringify(historico)
+);
+
+},[historico]);
+
+const totalTrad =
+historico.length;
+
+const totalChars =
+historico.reduce(
+(acc,item)=>
+acc +
+(item.original?.length||0),
+0
+);
+
+const copiarTraducao =
+async()=>{
+
+if(!traducao) return;
+
+try{
+
+await navigator.clipboard
+.writeText(traducao);
+
+alert("Copiado!");
+
+}catch(err){
+
+console.error(err);
+
+}
+
+};
+
+const limparHistorico =
+()=>{
+
+setHistorico([]);
+
+localStorage.removeItem(
+"historicoTradutorUltra"
+);
+
+};
+
+const exportarJSON =
+()=>{
+
+const blob =
+new Blob(
+[
+JSON.stringify(
+historico,
+null,
+2
+)
+],
+{
+type:
+"application/json"
+}
+);
+
+const url =
+URL.createObjectURL(
+blob
+);
+
+const a =
+document.createElement("a");
+
+a.href = url;
+a.download =
+"historico.json";
+
+a.click();
+
+URL.revokeObjectURL(
+url
+);
+
+};
+
+const exportarTXT =
+()=>{
+
+const blob =
+new Blob(
+[traducao],
+{
+type:"text/plain"
+}
+);
+
+const url =
+URL.createObjectURL(
+blob
+);
+
+const a =
+document.createElement("a");
+
+a.href = url;
+a.download =
+"traducao.txt";
+
+a.click();
+
+URL.revokeObjectURL(
+url
+);
+
+};
+
+const narrar =
+()=>{
+
+if(!traducao) return;
+
+window.speechSynthesis
+.cancel();
+
+const voz =
+new SpeechSynthesisUtterance(
+traducao
+);
+
+voz.lang =
+idiomaDestino === "pt"
+? "pt-BR"
+: idiomaDestino;
+
+window.speechSynthesis
+.speak(voz);
+
+};
